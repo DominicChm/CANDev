@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include "can.h"
 
-#define ADDRESS 0x0000
+#define ADDRESS 0x0001
 
 // Total state definition of this "simple" module
 struct simple {

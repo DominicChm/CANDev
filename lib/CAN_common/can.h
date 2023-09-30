@@ -26,9 +26,7 @@ void loop() {
         Serial.println("CAN AVAILABLE");
         canmsg_t msg = can_hal_read();
 
-        // Distribute the message to known interfaces until one successfully handles it.
-        for (size_t i = 0; i < CANInterface::num_interfaces && !CANInterface::interfaces[i]->try_handle_message(msg); i++)
-            ;
+        CANInterfaceBase::distribute(msg);
     }
 }
 }  // namespace can

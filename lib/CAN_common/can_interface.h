@@ -1,28 +1,26 @@
+#ifndef CAN_INTERFACE_H
+#define CAN_INTERFACE_H
+
 #include <Arduino.h>
 
 #include "can_common.h"
 #include "can_hal.h"
 #include "can_mapping.h"
 
-#define MAX_INTERFACES 64
+#define MAX_INTERFACES 32
 
-/**
- * Links the CAN HAL and mappings, at a specific address
- */
-class CANInterface {
+class CANInterfaceBase {
+   public:
+    // Interfaces add themselves to this array when they are constructed.
+    inline static CANInterfaceBase* interfaces[MAX_INTERFACES] = {};
+    inline static size_t num_interfaces = 0;
+
+    void* ptr_data_root;
     CANMappings& mappings;
     const size_t base_address;
-    void* data;
 
-   public:
-    // Tracks in-use interfaces.
-    // Interfaces add themselves to this array when they are constructed.
-    static CANInterface* interfaces[MAX_INTERFACES];
-    static size_t num_interfaces;
-
-    template <typename TData>
-    CANInterface(const uint32_t base_address, TData& data, CANMappings& mappings) : mappings(mappings), base_address(base_address), data(&data) {
-        CANInterface::interfaces[CANInterface::num_interfaces++] = this;  // Register this interface so that messages are pushed to it.
+    CANInterfaceBase(const uint32_t base_address, CANMappings& mappings, void* data) : ptr_data_root(data), mappings(mappings), base_address(base_address) {
+        CANInterfaceBase::interfaces[CANInterfaceBase::num_interfaces++] = this;  // Register this interface so that messages are pushed to it.
     }
 
     /**
@@ -32,7 +30,7 @@ class CANInterface {
      * This range is defined as [BASE ADDRESS, BASE ADDRESS + Number of mappings]
      */
     bool handles_address(uint32_t incoming_address) {
-        return incoming_address - base_address < mappings.num_mappings;
+        return (incoming_address - base_address - 1) < mappings.num_mappings;
     }
 
     /**
@@ -46,13 +44,47 @@ class CANInterface {
     bool try_handle_message(canmsg_t msg) {
         if (!handles_address(msg.address)) return false;
 
-        uint32_t offset = msg.address - base_address;
+        int32_t offset = msg.address - base_address - 1;
 
-        // if (mappings.size_at_address(offset) != msg.size) return false;
+        if(offset < 0) {
+            // SPECIAL CASE
+            return true;
+        }
+
+        // if (mappings.address_offset_to_size(offset) != msg.size) return false;
         Serial.println("CAN MESSAGE HANDLED");
-        memcpy(mappings.resolve_address_data_ptr(data, offset), msg.data, msg.size);
+        void* data_target = mappings.address_offset_to_ptr(ptr_data_root, offset);
+        if(!data_target) {
+            Serial.println("COULDN'T RESOLVE MAPPING!");
+            return true;
+        } 
+        memcpy(data_target, msg.data, msg.size);
 
         return true;
+    }
+
+   public:
+    static bool distribute(canmsg_t& msg) {
+        // Distribute the message to known interfaces until one successfully handles it.
+        for (size_t i = 0; i < num_interfaces; i++) {
+            if (interfaces[i]->try_handle_message(msg)) return true;
+        }
+
+        return false;
+    }
+};
+
+/**
+ * Links the CAN HAL, mappings, and data together using CANInterfaceBase.
+ */
+template <typename T>
+class CANInterface : public T {
+   private:
+    CANInterfaceBase base;
+
+   public:
+    // https://stackoverflow.com/questions/4066233/pointer-to-base-class
+    CANInterface(const uint32_t base_address, CANMappings& mappings) : base(CANInterfaceBase(base_address, mappings, dynamic_cast<T*>(this))) {
     }
 
     /**
@@ -60,12 +92,12 @@ class CANInterface {
      * CANInterface onto the CANBus.
      */
     void transmit(bool pack = false) {
-        for (size_t i = 0; i < mappings.num_mappings; i++) {
-            const can_mapping_t* m = &mappings.mappings[i];
+        for (size_t i = 0; i < base.mappings.num_mappings; i++) {
+            const can_mapping_t* m = &base.mappings.mappings[i];
 
-            void* ptr_data = mappings.resolve_mapping_ptr(&data, m);
+            void* ptr_data = base.mappings.mapping_to_ptr(base.ptr_data_root, m);
             canmsg_t msg{
-                base_address + i,
+                base.base_address + i,
                 m->size,
             };
 
@@ -76,5 +108,4 @@ class CANInterface {
     }
 };
 
-CANInterface* CANInterface::interfaces[MAX_INTERFACES] = {0};
-size_t CANInterface::num_interfaces = 0;
+#endif

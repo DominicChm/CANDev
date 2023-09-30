@@ -3,8 +3,9 @@
 #include "can_common.h"
 
 bool can_hal_begin();
-bool can_hal_available();
+int can_hal_available();
+int can_hal_write_available();
 canmsg_t can_hal_read();
-void can_hal_write(canmsg_t *msg);
+bool can_hal_write(canmsg_t *msg);
 
 #endif

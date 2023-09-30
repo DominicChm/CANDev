@@ -3,4 +3,3 @@
 #define CAN_ADDR_ECVT_BASE 0x0100
 
 #define CAN_ADDR_MAX 0xFFFF
-#define MAX_INTERFACES 64

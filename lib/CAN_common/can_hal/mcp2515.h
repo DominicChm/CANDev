@@ -46,8 +46,24 @@ bool can_hal_begin() {
     return true;
 }
 
-bool can_hal_available() {
-    return flag_can_irq || irqs & (MCP2515::CANINTF_RX0IF | MCP2515::CANINTF_RX1IF);
+void update_irqs() {
+    if (flag_can_irq) {
+        irqs = mcp.getInterrupts();
+    }
+}
+
+inline int bto1(int mask, int val) {
+    return val & mask ? 1 : 0;
+}
+
+int can_hal_available() {
+    update_irqs();
+    return bto1(MCP2515::CANINTF_RX0IF, irqs) + bto1(MCP2515::CANINTF_RX1IF, irqs);
+}
+
+int can_hal_write_available() {
+    update_irqs();
+    return bto1(MCP2515::CANINTF_TX0IF, irqs) + bto1(MCP2515::CANINTF_TX1IF, irqs) + bto1(MCP2515::CANINTF_TX2IF, irqs);
 }
 
 canmsg_t can_hal_read() {
@@ -73,13 +89,12 @@ canmsg_t can_hal_read() {
     return canmsg_t{};
 }
 
-void can_hal_write(canmsg_t *msg) {
-    can_frame frame {
+bool can_hal_write(canmsg_t *msg) {
+    can_frame frame{
         msg->address,
-        (uint8_t) msg->size   
-    };
+        (uint8_t)msg->size};
 
     memcpy(&frame.data, &msg->data, 8);
 
-    mcp.sendMessage(MCP2515::TXB1, &frame);
+    mcp.sendMessage(&frame);
 }

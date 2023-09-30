@@ -39,36 +39,41 @@ constexpr can_mapping_t link(T& data) {
  */
 class CANMappings {
    public:
-    const void* map_root;
     const can_mapping_t* mappings;
     const size_t num_mappings;
 
     template <size_t NMappings>
-    CANMappings(const void* map_source, const can_mapping_t (&mappings)[NMappings]) : map_root(map_source), mappings(mappings), num_mappings(NMappings) {
+    CANMappings(const can_mapping_t (&mappings)[NMappings]) : mappings(mappings), num_mappings(NMappings) {
     }
 
     /**
      *  Converts a CAN address offset to a pointer to the data it maps to.
      */
-    void* resolve_address_data_ptr(void* data_root, uint32_t offset) {
+    void* address_offset_to_ptr(void* data_root, uint32_t offset) {
         if (offset >= num_mappings) return 0;
 
         // Use the provided mappings and their root address to
         // create a corresponding pointer into the passed memory.
-        return (void*)((size_t)data_root + (size_t)mappings[offset].data - (size_t)map_root);
+        return mapping_to_ptr(data_root, &mappings[offset]);
     }
 
-    size_t size_at_address(uint32_t offset) {
+    size_t address_offset_to_size(uint32_t offset) {
+        offset--;  // Data offsets start at Address + 1 (Address + 0 is reserved for framework)
         if (offset >= num_mappings) return 0;
 
         return mappings[offset].size;
     }
 
-    void* resolve_mapping_ptr(void* data_root, const can_mapping_t* mapping) {
+    void* mapping_to_ptr(void* data_root, const can_mapping_t* mapping) {
         if (mapping == nullptr) return 0;
 
         // Use the provided mappings and their root address to
         // create a corresponding pointer into the passed memory.
-        return (void*)((size_t)data_root + (size_t)mapping->data - (size_t)map_root);
+        return (void*)((size_t)data_root + (size_t)mapping->data);
+    }
+
+    template <typename T>
+    static T* map_root() {
+        return (T*)0;
     }
 };
